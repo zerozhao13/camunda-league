@@ -1,0 +1,23 @@
+server:
+  port: 8090
+spring:
+  datasource:
+    name: camunda
+    driver-class-name: org.mariadb.jdbc.Driver
+    url: jdbc:mariadb://127.0.0.1:3306/phoenix_camunda?useUnicode=true&characterEncoding=utf8mb4&allowMultiQueries=true
+    type: com.zaxxer.hikari.HikariDataSource
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 5
+      username: camunda
+      password: camunda
+      auto-commit: true
+      idle-timeout: 10000
+      pool-name: PhoenixCamunda
+      max-lifetime: 1800000
+      connection-timeout: 11000
+      connection-test-query: SELECT 1
+
+camunda.bpm.admin-user:
+  id: phoenix
+  password: phoenix
