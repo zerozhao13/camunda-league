@@ -1,4 +1,4 @@
-package com.phoenix.workflow.service.domain;
+package com.phoenix.workflow.service.domain.identity;
 
 import org.camunda.bpm.engine.ProcessEngine;
 import org.camunda.bpm.engine.ProcessEngineConfiguration;
