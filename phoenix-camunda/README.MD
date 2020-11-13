@@ -244,3 +244,391 @@ ProcessEngine 是基础，可以通过xml配置或者java配置的方式来实�
 接下来我们将会开始介绍IdentityService。
 
 关于ProcessEngine的配置，有兴趣的小伙伴也可以参考 [官方文档](https://docs.camunda.org/manual/7.13/user-guide/process-engine/process-engine-bootstrapping/)。
+
+# Camunda流程引擎系列
+<font color=#999AAA >三、租户、组、用户 - IdentityService
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+</font>
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+# 前言
+
+上一个分享我们从**流程引擎配置**获得了**流程引擎**的一个对象，事实上我们去看源码，我们接下来的这些Service也都是来自于**流程引擎配置**，所以上一个分享很简短，但是很重要，在后面的分享我们也可以再回过头来把流程引擎这一块的内容再做一些更细的分享。
+现在我们要开始分享IdentityService，这里面有着Camunda关于用户的主要内容，我们去理解一个系统，总是不可避免要去理解他的用户模型，因为一个系统做出来一定是解决人的问题的，所以我们对于Camunda的几个重要Service，变从用户未切入口进行分享。
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+
+# 一、IdentityService
+
+Identity service 是在各种租户、组、用户上的抽象，这其中由以下几个实体组成：
+
+ - User: 一个由唯一ID确定的用户； 
+ - Group: 一个由唯一ID确定的组； 
+ - Membership: 用户与组的关系； 
+ - Tenant:  一个由唯一ID确定的租户； 
+ - Tenant Membership: 租户与组/用户的关系；
+
+Example:
+
+```java
+User user = processEngine.getIdentityService()
+  .createUserQuery()
+  .userId("phoenix")
+  .singleResult();
+```
+
+Camunda BPM 分为支付与可写用户实现，只读用户提供了只读的底层连接到用户与组数据库，可写用户则提供了对用户的增删改查。
+
+为了提供定制化的身份实现，可以实现以下两个接口：
+
+
+> org.camunda.bpm.engine.impl.identity.ReadOnlyIdentityProvider
+> org.camunda.bpm.engine.impl.identity.WritableIdentityProvider
+
+
+# 二、基于数据库的IdentityService
+## 1. 简介
+基于数据库的 identity service 通过从流程引擎配置的数据库进行用户相关的管理，这也是默认的identity service实现。
+
+基于数据库的 identity service 默认同时实现了只读以及可写的关于用户、组以及相关关系管理的增删改查。
+
+## 2. 数据库表
+我们先来看看这里涉及到哪些底层数据库表
+### 组表
+这是Camunda关于组的表，里面字段并不多，为了更好兼容中文及特殊字符，可以将utf8修改为utf8mb4。
+```sql
+create table ACT_ID_GROUP (
+    ID_ varchar(64),
+    REV_ integer,
+    NAME_ varchar(255),
+    TYPE_ varchar(255),
+    primary key (ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 用户与组关系表
+
+```sql
+create table ACT_ID_MEMBERSHIP (
+    USER_ID_ varchar(64),
+    GROUP_ID_ varchar(64),
+    primary key (USER_ID_, GROUP_ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 用户表
+
+```sql
+create table ACT_ID_USER (
+    ID_ varchar(64),
+    REV_ integer,
+    FIRST_ varchar(255),
+    LAST_ varchar(255),
+    EMAIL_ varchar(255),
+    PWD_ varchar(255),
+    SALT_ varchar(255),
+    LOCK_EXP_TIME_ datetime(3) NULL,
+    ATTEMPTS_ integer,
+    PICTURE_ID_ varchar(64),
+    primary key (ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 用户信息表
+这张表是用户补充信息表，但是官方已经不建议使用，目前留着应该是为了兼容老版本，为了以后使用不受升级可能造成的麻烦，尽量不要使用了。
+
+```sql
+create table ACT_ID_INFO (
+    ID_ varchar(64),
+    REV_ integer,
+    USER_ID_ varchar(64),
+    TYPE_ varchar(64),
+    KEY_ varchar(255),
+    VALUE_ varchar(255),
+    PASSWORD_ LONGBLOB,
+    PARENT_ID_ varchar(255),
+    primary key (ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 租户表
+
+```sql
+create table ACT_ID_TENANT (
+    ID_ varchar(64),
+    REV_ integer,
+    NAME_ varchar(255),
+    primary key (ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 租户与组/用户关系表
+
+```sql
+create table ACT_ID_TENANT_MEMBER (
+    ID_ varchar(64) not null,
+    TENANT_ID_ varchar(64) not null,
+    USER_ID_ varchar(64),
+    GROUP_ID_ varchar(64),
+    primary key (ID_)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8 COLLATE utf8_bin;
+```
+### 表外键
+在Camunda的数据库中，大量使用了外键，不确定是不是因为历史原因保留下来的，我们没有去考究这个问题，这确实不是现如今最常使用的一种手法了。
+
+这些外键关联我们需要去注意，特别是如果我们想要直接操作数据库数据时，忽略这些外键的存在可能会导致我们的系统出错。
+
+```sql
+alter table ACT_ID_MEMBERSHIP
+    add constraint ACT_FK_MEMB_GROUP
+    foreign key (GROUP_ID_)
+    references ACT_ID_GROUP (ID_);
+
+alter table ACT_ID_MEMBERSHIP
+    add constraint ACT_FK_MEMB_USER
+    foreign key (USER_ID_)
+    references ACT_ID_USER (ID_);
+
+alter table ACT_ID_TENANT_MEMBER
+    add constraint ACT_UNIQ_TENANT_MEMB_USER
+    unique (TENANT_ID_, USER_ID_);
+
+alter table ACT_ID_TENANT_MEMBER
+    add constraint ACT_UNIQ_TENANT_MEMB_GROUP
+    unique (TENANT_ID_, GROUP_ID_);
+
+alter table ACT_ID_TENANT_MEMBER
+    add constraint ACT_FK_TENANT_MEMB
+    foreign key (TENANT_ID_)
+    references ACT_ID_TENANT (ID_);
+
+alter table ACT_ID_TENANT_MEMBER
+    add constraint ACT_FK_TENANT_MEMB_USER
+    foreign key (USER_ID_)
+    references ACT_ID_USER (ID_);
+
+alter table ACT_ID_TENANT_MEMBER
+    add constraint ACT_FK_TENANT_MEMB_GROUP
+    foreign key (GROUP_ID_)
+    references ACT_ID_GROUP (ID_);
+```
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+## 用户相关操作
+用户是组与租户的基础，所以我们先来讲讲用户，我们将通过Camunda的API对用户进行增删改查的操作，如果我们要对用户做一些自身业务特有的扩展，也建议不要修改其原本的表结构，可以封装自己的DomainService层或BizService层，添加新表进行扩展，一旦我们修改了原表，未来进行版本升级就会变得非常困难了。
+
+### 新增用户
+
+```java
+    /**
+     * 由camunda自动为数据库加密加盐
+     *
+     * @param id
+     * @param firstname
+     * @param lastname
+     * @param email
+     * @param pwd
+     * @return
+     */
+    public String addUser(String id, String firstname, String lastname, String email, String pwd) {
+        UserEntity userEntity = new UserEntity();
+        userEntity.setId(id);
+        userEntity.setFirstName(firstname);
+        userEntity.setLastName(lastname);
+        userEntity.setEmail(email);
+        userEntity.setPassword(pwd);
+        identityService.saveUser(userEntity);
+        return id;
+    }
+```
+
+这里面有两个关键点：
+
+ - 我们创建了一个新的UserEntity对象
+ - 使用identityService的saveUser方法保存用户
+关于密码，Camunda做校验时默认会要求我们做加密，在上例中pwd存入数据库时会进行加密。如果我们要做单点登录的话，也可以集成LDAP，官方文档有做相关介绍。
+
+### 查询用户
+关于用户的查询Camunda提供了基于每个字段的方法，我们在这里只举例一个根据ID查询，小伙伴使用时可以根据提示看到还有哪些条件可以传入。
+
+```java
+    /**
+     * 根据id获取用户
+     * @param id
+     * @return
+     */
+    public User getUserById(String id) {
+        User user = identityService.createUserQuery().userId(id).singleResult();
+        return user;
+    }
+```
+这里我直接返回了User，那么为了更灵活的进行业务逻辑的处理，可以像下面这段例子一样，先获取到UserQuery，再基于UserQuery去添加条件。
+
+### 获取用户列表
+```java
+    /**
+     * 获取用户列表
+     * @param firstResult
+     * @param maxResult
+     * @return
+     */
+    public List<User> getUsers(int firstResult, int maxResult) {
+        UserQuery userQuery = identityService.createUserQuery();
+        return identityService.createUserQuery().listPage(firstResult, maxResult);
+    }
+```
+
+### 删除用户
+
+```java
+    /**
+     * 根据用户id删除用户
+     * @param userId
+     */
+    public void delUser(String userId) {
+        identityService.deleteUser(userId);
+    }
+```
+
+### 获取租户下的用户
+
+```java
+    /**
+     * 获取租户下的用户列表
+     * @param tenantId
+     * @param first
+     * @param max
+     * @return
+     */
+    public List<User> getUsersFromTenant(String tenantId, int first, int max) {
+        return identityService.createUserQuery().memberOfTenant(tenantId).listPage(first, max);
+    }
+```
+以上会是常用的与用户相关的操作，了解上面的操作后根据ide工具的自动提示，各位应该就能举一反三去根据自己的具体业务情况，进行Camunda用户的相关操作了。
+## 组相关操作
+组在很多的系统中可能类似于角色，就是我们把一组具有相同特征的人放在一起，便于我们对一类人的操作与管理，以及为这一类人分配任务等。
+对组的操作，依然依赖于IdentityService，我们依然列举几个简单的例子来展示对组的一些基本操作。
+### 添加组
+
+```java
+    /**
+     * 新增组
+     * @param id
+     * @param name
+     * @param rev
+     * @param type
+     */
+    public void addGroup(String id, String name, int rev, String type) {
+        GroupEntity groupEntity = new GroupEntity();
+        groupEntity.setId(id);
+        groupEntity.setName(name);
+        groupEntity.setRevision(rev);
+        groupEntity.setType(type);
+        identityService.saveGroup(groupEntity);
+    }
+```
+与用户需要用到UserEntity类似，进行组的操作时，我们需要用到GroupEntity这个类。
+### 将用户添加到组
+通过建立用户与组的关系，可以将用户添加到组。
+
+```java
+    /**
+     * 将用户添加到组
+     * @param userId
+     * @param groupId
+     */
+    public void createMembership(String userId, String groupId) {
+        identityService.createMembership(userId, groupId);
+    }
+```
+### 获取组列表
+
+```java
+    /**
+     * 根据分页获取组信息
+     * @param first
+     * @param max
+     * @return
+     */
+    public List<Group> getGroups(int first, int max) {
+        GroupQuery groupQuery = identityService.createGroupQuery();
+        return groupQuery.listPage(first, max);
+    }
+```
+### 删除组
+
+```java
+    /**
+     * 根据组ID删除组
+     * 可先获取组列表，再根据获取的ID删除
+     * @param groupId
+     */
+    public void delGroup(String groupId) {
+        identityService.deleteGroup(groupId);
+    }
+```
+### 从组中删除用户
+
+```java
+    /**
+     * 将用户从组中删除
+     * @param userId
+     * @param groupId
+     */
+    public void delMembership(String userId, String groupId) {
+        identityService.deleteMembership(userId, groupId);
+    }
+```
+### 获取租户下的组
+
+```java
+    /**
+     * 获取租户下的组
+     * @param tenantId
+     * @param first
+     * @param max
+     * @return
+     */
+    public List<Group> getGroupsFromTenant(String tenantId, int first, int max) {
+        return identityService.createGroupQuery().memberOfTenant(tenantId).listPage(first, max);
+    }
+```
+
+## 租户相关操作
+租户的操作与用户、组会比较类似，主要区别就在于实体类是TenantEntity，我们也做一些简单的例子帮助大家知道租户相关的基本操作，以此对相关API有所了解。
+
+```java
+    private IdentityService identityService = pnxIdentityService.getIdentityService();
+
+    /**
+     * 创建一个租户
+     * @param id
+     * @param name
+     */
+    public void saveTenant(String id, String name) {
+        TenantEntity tenantEntity = new TenantEntity();
+        tenantEntity.setId(id);
+        tenantEntity.setName(name);
+        identityService.saveTenant(tenantEntity);
+    }
+
+    /**
+     * 将用户添加到租户下
+     * @param tenantId
+     * @param userId
+     */
+    public void saveTenantUserMembership(String tenantId, String userId) {
+        identityService.createTenantUserMembership(tenantId, userId);
+    }
+
+    /**
+     * 将组添加到租户下
+     * @param tenantId
+     * @param groupId
+     */
+    public void saveTenantGroupMembership(String tenantId, String groupId) {
+        identityService.createTenantUserMembership(tenantId, groupId);
+    }
+```
+
+# 总结
+在这里，我们对用户、组、租户相关的表与API做了一些基本的分享，通过这些分享，我们已经基本可以满足业务逻辑对于用户、组、租户的基本操作要求。
+我们通过BizService层对DomainService层的包装，来满足我们对于这些基础要素使用的需求。

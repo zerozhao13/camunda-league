@@ -92,7 +92,7 @@ public class PnxIdentityService {
     }
 
     /**
-     * 根据用户id获取用户
+     * 根据用户id删除用户
      * @param userId
      */
     public void delUser(String userId) {
