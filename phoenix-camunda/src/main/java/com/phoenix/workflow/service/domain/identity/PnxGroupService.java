@@ -1,5 +1,6 @@
 package com.phoenix.workflow.service.domain.identity;
 
+import com.phoenix.workflow.enums.PnxProcessEngine;
 import org.camunda.bpm.engine.IdentityService;
 import org.camunda.bpm.engine.identity.Group;
 import org.camunda.bpm.engine.identity.GroupQuery;
@@ -19,10 +20,8 @@ import java.util.List;
  */
 @Service
 public class PnxGroupService {
-    @Autowired
-    PnxIdentityService pnxIdentityService;
 
-    private IdentityService identityService = pnxIdentityService.getIdentityService();
+    private final IdentityService identityService = PnxProcessEngine.INSTANCE.getProcessEngine().getIdentityService();
 
     /**
      * 新增组

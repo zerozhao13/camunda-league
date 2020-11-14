@@ -16,8 +16,8 @@ import org.camunda.bpm.engine.ProcessEngineConfiguration;
  */
 public enum PnxProcessEngine {
     INSTANCE;
-    private ProcessEngine processEngine;
-    private PnxProcessEngine () {
+    private final ProcessEngine processEngine;
+    PnxProcessEngine() {
         this.processEngine = ProcessEngineConfiguration
                 .createStandaloneProcessEngineConfiguration()
                 .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_FALSE)

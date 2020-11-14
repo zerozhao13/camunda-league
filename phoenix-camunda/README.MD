@@ -177,8 +177,8 @@ import org.camunda.bpm.engine.ProcessEngineConfiguration;
  */
 public enum PnxProcessEngine {
     INSTANCE;
-    private ProcessEngine processEngine;
-    private PnxProcessEngine () {
+    private final ProcessEngine processEngine;
+    PnxProcessEngine () {
         this.processEngine = ProcessEngineConfiguration
                 .createStandaloneProcessEngineConfiguration()
                 .setDatabaseSchemaUpdate(ProcessEngineConfiguration.DB_SCHEMA_UPDATE_FALSE)
@@ -632,3 +632,234 @@ alter table ACT_ID_TENANT_MEMBER
 # 总结
 在这里，我们对用户、组、租户相关的表与API做了一些基本的分享，通过这些分享，我们已经基本可以满足业务逻辑对于用户、组、租户的基本操作要求。
 我们通过BizService层对DomainService层的包装，来满足我们对于这些基础要素使用的需求。
+
+# Camunda流程引擎系列
+四、运行时服务类 - RuntimeService
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+</font>
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+# 前言
+
+该服务类包含了许多与实例相关的服务，流程定义好的规则开始运转时，就是我们本次分享的主要内容。
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+
+# 一、RuntimeServiceImpl
+
+
+我们对运行时服务的调用，基本都可以基于该类进行操作，官方提供了非常多的方法，有兴趣的小伙伴可以搜索 RuntimeServiceImpl 看看源码，在org.camunda.bpm.engine.impl包下。
+
+## 派生类
+
+ - 可根据不同API启动实例，并返回ProcessInstance对象；
+ - 可异步删除所有实例，并返回Batch对象；
+ - 可获取变量信息，并返回VariableMap对象；
+ - 可获取变量信息，并返回Map<String, Object>对象；
+ - 可获取单个变量信息，并返回TypedValue；
+ - 可查询执行实例，并返回ExecutionQuery对象；
+ - 可自定义SQL查询并执行实例，并返回NativeExecutionQuery对象；
+ - 可查询流程实例信息，并返回ProcessInstanceQuery对象；
+ - 可自定义SQL查询流程实例信息，并返回NativeProcessInstanceQuery对象；
+ - 可查询Incident相关信息，并返回Incident对象；
+
+## 启动实例方式
+
+ - processDefinitionKey
+ - processDefinitionKey + 租户ID
+ - messageName + 租户ID
+ - messageName
+ - processDefinitionId
+
+# 二、流程定义
+## 1.定义
+
+> 流程定义：通过资源文件，获取已事先定义好的流程规则信息。
+> 执行实例：发起流程定义，可以认为流程定义就像定义了一个类，而执行实例就是生成了一个对象。
+> 流程实例：一个流程的最长分支，就好比项目管理里面的关键路径。
+
+```java
+public interface ProcessInstance extends Execution
+```
+
+启动流程时会首先创建流程实例，如果存在子流程、多实例、并行网关，则会再次创建执行实例。流程运转的过程中永远执行的时自己对应的执行实例。当所有执行实例按照规则执行完毕之后，则流程实例随之结束。
+
+Camunda用ProcessInstance对象去描述流程执行的每一个节点，流程按照流程定义的规则执行一次的过程，就可以表示执行对象Execution。
+
+一个流程中，执行对象可以是多个，执行实例在某个活动节点时，需要我们通过特定API去完成，然后执行实例继续往下走。
+
+一个实例运行的简单过程：
+
+ 1. 启动实例；
+ 2. 创建实例；
+ 3. 更新实例；
+ 4. 完成实例。
+
+稍微复杂一点的如存在并行网关的话，流程实例就是这样的：
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20201114183817321.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MjI4ODIxOQ==,size_16,color_FFFFFF,t_70#pic_center)
+
+## 2. 启动流程
+
+RuntimeService有很多启动流程的API，我们演示其中一种，因为不同的API主要差别在于传参的不同，传参不同主要是业务逻辑的不同，但是其本质大同小异。
+
+### 获取runtimeService
+
+```java
+private RuntimeService runtimeService = PnxProcessEngine.INSTANCE.getProcessEngine().getRuntimeService();
+```
+### 根据key启动实例
+这个KEY可以在数据库表 ACT_RE_PROCDEF 的KEY_字段查看到，当然也可以在流程文件中查到，或者通过查询接口查到。
+
+```java
+    public ProcessInstance startProcess(String key) {
+        return runtimeService.startProcessInstanceByKey(key);
+    }
+```
+实例启动后，程序会返回ProcessInstance 的对象。
+下面是我们的测试代码，可以看看返回的对象包含什么样的数据
+
+```java
+    @Test
+    void startProcess() {
+        String key = "Process_0iplu3k";
+        ProcessInstance processInstance = pnxRuntimeService.startProcess(key);
+        processInstance.getId();
+        System.out.println("id is : " + processInstance.getId());
+        System.out.println("getBusinessKey is : " + processInstance.getBusinessKey());
+        System.out.println("getRootProcessInstanceId is : " + processInstance.getRootProcessInstanceId());
+        System.out.println("getProcessInstanceId is : " + processInstance.getProcessInstanceId());
+    }
+```
+
+当流程实例启动时，以下两张表会有新的数据插入：
+
+> ACT_RU_EXECUTION
+> ACT_RU_TASK
+
+同时会有几张历史表也会插入数据（ACT_HI_XXXX都是历史表）：
+
+> ACT_HI_ACTINST
+> ACT_HI_TASKINST
+> ACT_HI_PROCINST
+> ACT_HI_IDENTITYLINK
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+### 完成Task
+一个实例启动过后，对应的任务需要完成才会走入下一个节点，这时候我们会有大量对Task的操作，从产品的角度来看，一个任务启动会根据规则分配到人，然后该用户获取自己的任务列表，进行操作后完成该任务。
+
+那么我们看看这几个操作会涉及哪几个API，以及用测试代码做一下测试看看，然后对完成一个任务时会操作哪些数据做一些讲解。
+
+```java
+/**
+ * @author zhaopeng01
+ * @version 1.0
+ * @title: PnxTaskServiceImpl
+ * @projectName phoenix-camunda
+ * @description: TODO
+ * @date 2020/11/1421:41
+ */
+@Service
+public class PnxTaskServiceImpl {
+    private final TaskService taskService = PnxProcessEngine.INSTANCE.getProcessEngine().getTaskService();
+
+    public List<Task> getTasks(int first, int max) {
+        return taskService.createTaskQuery().listPage(first, max);
+    }
+
+    public void assignTask(String taskId, String assignee) {
+        taskService.setAssignee(taskId, assignee);
+    }
+
+    public List<Task> getTasksByAssignee(String assignee, int first, int max) {
+        return taskService.createTaskQuery().taskAssignee(assignee).listPage(first, max);
+    }
+
+    public void completeTask(String taskId) {
+        taskService.complete(taskId);
+    }
+
+    public Task getTaskById(String taskId) {
+        return taskService.createTaskQuery().taskId(taskId).singleResult();
+    }
+}
+```
+<hr>
+测试代码：
+
+```java
+/**
+ * @author zerozhao
+ * @version 1.0
+ * @title: PnxTaskServiceImplTest
+ * @projectName phoenix-camunda
+ * @description: TODO
+ * @date 2020/11/1421:50
+ */
+@SpringBootTest
+class PnxTaskServiceImplTest {
+    @Autowired
+    PnxTaskServiceImpl taskService;
+
+    private String taskId = "1604";
+    private final String assignee = "zero";
+
+    @Test
+    @Order(0)
+    void getTasks() {
+        System.out.println(taskService);
+        List<Task> tasks = taskService.getTasks(0, 5);
+        tasks.stream().forEach(task -> {
+            taskId = task.getId();
+        });
+    }
+
+    @Test
+    @Order(1)
+    void assignTask() {
+        taskService.assignTask(taskId, assignee);
+    }
+
+    @Test
+    @Order(2)
+    void getTasksByAssignee() {
+        List<Task> tasks = taskService.getTasksByAssignee(assignee, 0, 5);
+        tasks.stream().forEach(task -> {
+            assertEquals("assignee is equal.", task.getAssignee(), assignee);
+        });
+    }
+
+    @Test
+    @Order(3)
+    void completeTask() {
+        taskService.completeTask(taskId);
+        Task task = taskService.getTaskById(taskId);
+        assertNull("没有对应task", task);
+    }
+}
+```
+在这组单元测试代码中，我们会先查询任务列表，然后对该任务赋予一个执行人，接下来会完成该任务，用原任务号去查询，该任务已经没有了。
+那么原任务去哪里了呢？进入历史表了，而任务表会插入一个新的任务，是我们流程定义的下一个节点。
+任务的完成会涉及到多张表的数据操作，那么我们来看看分别是那几张表，这将有利于我们理解其背后的逻辑，从而更好地完成我们的业务诉求。
+
+插入：
+
+> ACT_HI_TASKINST
+> ACT_HI_IDENTITYLINK(不一定有，要看用户模式)
+> ACT_HI_ACTINST
+> ACT_RU_TASK
+
+删除：
+
+> ACT_RU_TASK
+
+更新：
+
+> ACT_RU_EXECUTION
+> ACT_HI_ACTINST
+> ACT_HI_TASKINST
+
+# 总结

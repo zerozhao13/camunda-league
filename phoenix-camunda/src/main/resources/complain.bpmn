@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:camunda="http://camunda.org/schema/1.0/bpmn" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_14fvy0g" targetNamespace="http://bpmn.io/schema/bpmn" exporter="Camunda Modeler" exporterVersion="4.3.0">
+  <bpmn:process id="Process_0iplu3k" isExecutable="true">
+    <bpmn:startEvent id="StartComplain" name="StartComplain" camunda:formKey="StartComplainForm">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="FormField_userId" label="userId" type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:outgoing>Flow_196eqxl</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sequenceFlow id="Flow_196eqxl" sourceRef="StartComplain" targetRef="Activity_cs_add" />
+    <bpmn:userTask id="Activity_cs_add" name="客服资料补齐" camunda:formKey="Activity_cs_add_form">
+      <bpmn:extensionElements>
+        <camunda:formData>
+          <camunda:formField id="FormField_app" label="应用" type="string" />
+        </camunda:formData>
+      </bpmn:extensionElements>
+      <bpmn:incoming>Flow_196eqxl</bpmn:incoming>
+      <bpmn:outgoing>Flow_13clsyh</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sequenceFlow id="Flow_13clsyh" sourceRef="Activity_cs_add" targetRef="Activity_0dy4vh4" />
+    <bpmn:intermediateThrowEvent id="Event_0cqhrrh">
+      <bpmn:incoming>Flow_0ypjvc8</bpmn:incoming>
+    </bpmn:intermediateThrowEvent>
+    <bpmn:sequenceFlow id="Flow_0ypjvc8" sourceRef="Activity_0dy4vh4" targetRef="Event_0cqhrrh" />
+    <bpmn:userTask id="Activity_0dy4vh4">
+      <bpmn:incoming>Flow_13clsyh</bpmn:incoming>
+      <bpmn:outgoing>Flow_0ypjvc8</bpmn:outgoing>
+    </bpmn:userTask>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_0iplu3k">
+      <bpmndi:BPMNEdge id="Flow_196eqxl_di" bpmnElement="Flow_196eqxl">
+        <di:waypoint x="215" y="117" />
+        <di:waypoint x="270" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_13clsyh_di" bpmnElement="Flow_13clsyh">
+        <di:waypoint x="370" y="117" />
+        <di:waypoint x="440" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0ypjvc8_di" bpmnElement="Flow_0ypjvc8">
+        <di:waypoint x="540" y="117" />
+        <di:waypoint x="612" y="117" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="_BPMNShape_StartEvent_2" bpmnElement="StartComplain">
+        <dc:Bounds x="179" y="99" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="162" y="142" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1in03a9_di" bpmnElement="Activity_cs_add">
+        <dc:Bounds x="270" y="77" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_0cqhrrh_di" bpmnElement="Event_0cqhrrh">
+        <dc:Bounds x="612" y="99" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Activity_1i8isik_di" bpmnElement="Activity_0dy4vh4">
+        <dc:Bounds x="440" y="77" width="100" height="80" />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

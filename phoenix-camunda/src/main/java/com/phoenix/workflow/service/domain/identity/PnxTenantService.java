@@ -1,5 +1,6 @@
 package com.phoenix.workflow.service.domain.identity;
 
+import com.phoenix.workflow.enums.PnxProcessEngine;
 import org.camunda.bpm.engine.IdentityService;
 import org.camunda.bpm.engine.impl.persistence.entity.TenantEntity;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,10 +14,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * @date 2020/11/1121:02
  */
 public class PnxTenantService {
-    @Autowired
-    PnxIdentityService pnxIdentityService;
 
-    private IdentityService identityService = pnxIdentityService.getIdentityService();
+    private final IdentityService identityService = PnxProcessEngine.INSTANCE.getProcessEngine().getIdentityService();
 
     /**
      * 创建一个租户
