@@ -20,10 +20,17 @@ import java.util.List;
 @Service
 public class PnxIdentityService {
 
-    IdentityService identityService = PnxProcessEngine.INSTANCE.getProcessEngine().getIdentityService();
+    private IdentityService identityService;
+
+    private PnxIdentityService () {
+        identityService = PnxProcessEngine.INSTANCE.getProcessEngine().getIdentityService();
+    }
 
     public IdentityService getIdentityService() {
         return this.identityService;
+    }
+    public void setAuthUser(String user) {
+        identityService.setAuthenticatedUserId(user);
     }
 
     /**

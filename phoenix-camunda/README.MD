@@ -862,4 +862,219 @@ class PnxTaskServiceImplTest {
 > ACT_HI_ACTINST
 > ACT_HI_TASKINST
 
+### 历史数据
+在流程引擎中，更多的数据会记录进历史表中，我们要查询一些任务的状态或者列表，都会使用到这些历史表，而有的数据会在系统运行中，同步插入历史表与当前任务表。
+我们来看看几张主要的历史表以及与之对应的当前数据表。
+
+> - ACT_RU_EXECUTION：正在执行的信息
+> - ACT_HI_PROCINST：已经执行完的历史流程实例信息
+> - ACT_HI_ACTINST：所有完成的历史活动
+> - ACT_RU_TASK：正在执行的任务数据
+> - ACT_HI_TASKINST：已经执行完的历史任务数据
+
+### 设定发起人与使用initiator
+之前的流程中，我们设置了流程的当前节点执行人，但是在实际的场景中我们的流程是不是还会有一个发起人？以及每个任务节点的指派人？指派人的设定会有一点不同，并且可以将指派人作为变量传入后续的任务中。
+
+```java
+    @Autowired
+    PnxIdentityService pnxIdentityService;
+    @Autowired
+    PnxRuntimeServiceImpl pnxRuntimeService;
+
+    /**
+     * 指定启动用户的开启流程
+     * @param authUser
+     * @param processKey
+     */
+    public void startProcess(String authUser, String processKey) {
+        pnxIdentityService.setAuthUser(authUser);
+        pnxRuntimeService.startProcess(processKey);
+    }
+```
+通过IdentityService来设置流程发起人。
+
+**NOTE：**我们开启流程最好用key，不要使用id，id是系统标识，会伴随部署更新对应的值，导致系统可能走到我们预期以外的流程上去。
+
+### 删除流程实例
+一个流程，如果走到一半，或者别的原因，我们希望中止了，那么就可以使用流程删除，流程删除的操作也很简单，调用RuntimeService的API即可，传入流程实例的ID与删除原因。
+
+```java
+    public void delProcess (String processId, String reason) {
+        runtimeService.deleteProcessInstance(processId, reason);
+    }
+```
+这个过程中会涉及到如下数据库表操作：
+删除：
+
+> - ACT_RU_TASK
+> - ACT_RU_EXECUTION
+
+更新：
+
+> - ACT_HI_ACTINST
+> - ACT_HI_PROCINST
+> - ACT_HI_TASKINST
+
+### 流程的挂起与激活
+有时候我们不希望一个流程被删除，但是也不希望再被操作，等待以后重新恢复。
+当一个流程实例挂起时，该实例下的子流程也都会挂起，所以需要慎重确认。
+
+ - 流程定义的挂起
+
+```java
+    /**
+     * 挂起流程定义，挂起后基于该定义的流程将不能再执行，除非先激活
+     *
+     * @param id
+     */
+    public void suspendProcessDef(String id) {
+        runtimeService.suspendProcessInstanceByProcessDefinitionId(id);
+    }
+```
+
+- 流程实例的挂起
+
+```java
+    /**
+     * 挂起流程定义，挂起后基于该定义的流程将不能再执行，除非先激活
+     *
+     * 两种挂起方式
+     *
+     * @param id
+     */
+    public void suspendProcessDef(String id) {
+        //runtimeService.suspendProcessInstanceByProcessDefinitionId(id);
+        ProcessInstanceQuery processInstanceQuery = runtimeService.createProcessInstanceQuery();
+        processInstanceQuery.processInstanceId(id);
+        runtimeService.updateProcessInstanceSuspensionState().byProcessInstanceQuery(processInstanceQuery).suspendAsync();
+    }
+```
+
+- 激活流程定义
+
+```java
+    /**
+     * 两种激活流程定义的方法
+     * @param id
+     */
+    public void activeProcessDef(String id) {
+        //repositoryService.activateProcessDefinitionById(id);
+        repositoryService
+                .updateProcessDefinitionSuspensionState()
+                .byProcessDefinitionId(id)
+                .includeProcessInstances(true)
+                .activate();
+    }
+```
+
 # 总结
+
+# Camunda流程引擎系列
+五、节点
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+</font>
+
+<hr style=" border:solid; width:100px; height:1px;" color=#000000 size=1">
+
+# 前言
+
+流程引擎的关键，特别是基于BPMN的流程引擎，我们应该去了解它包含哪些元素。
+
+BPMN基本元素包括了这些元素，如下：
+
+- 泳道：池和道；
+- 三种连接对象：序列流、消息流和关联；
+ - 一种活动：任务（Task），其中包括了子流程任务（Sub-ProcessTask）；
+ - 两种事件：普通开始事件（NoneStart Event）和普通结束事件（None End Event）；
+ - 两种网关：排他网关（Exclusive）和并发网关（Parallel）；
+ - 一种人工制造物：附注。 
+
+我们在这次分享中的节点，会是一个比较综合的东西，因为我们看基本元素里面并没有元素叫这个名字。我们会在这里介绍到一些常用的节点，包括启动、结束以及一些task，虽然我们在前面的分享已经涉及到了一些。
+
+# 一、开始节点
+
+ - 开始节点代表一个流程的开始；
+ - 一个流程文件中，开始节点只能有一个，不能有多个；
+ - 子流程与引用流程其开始节点也只能是一个；
+ - 启动流程实例的时候，从开始节点开始运转流程；
+
+开始节点有几种类型，如图：
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20201116205202726.png#pic_center)
+
+# 结束节点
+
+ - 结束节点代表一个流程的结束；
+ - 在一个流程文件中，结束节点可以有多个；
+ - 如果实例运转到结束节点，则表示当前执行实例结束了；
+结束节点有几种类型，如图：
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20201116205654853.png#pic_center)
+
+
+# 二、UserTask
+用户任务属于等待节点，既表示系统走到这里会等待人来处理，不会自己往后走，那么对于用户任务，我们可以先想想这几个问题：
+
+ - 任务从何而来？
+ - 任务由谁处理？
+ - 任务如何处理？
+ - 办理过的任务如何查看？
+### TaskService
+这是Camunda的任务服务类，我们在之前runtimeService的分享中，其实已经涉及到了，我们可以从TaskService中发现各种执行任务相关的API。
+
+我们在这里再分享一下通过变量的方式来启动任务：
+
+ 1. 在配置流程时，配入变量，如assignee一栏，将其配置为 #{userId}；
+ 2. 启动流程或任务时通过variables参数传入变量的键值对；
+
+```java
+    /**
+     * 可通过定义的变量传入来启动对应流程
+     * 如在流程中定义了变量，如果不在启动时传入，系统会报错
+     * 如流程定义中指定用户为 #{userId}, 那么在启动时我们需要通过vars传入userId，放入map中
+     *
+     * @param key
+     * @param vars
+     * @return
+     */
+    public ProcessInstance startProcess(String key, Map<String, Object> vars) {
+        return runtimeService.startProcessInstanceByKey(key, vars);
+    }
+```
+## 监听器
+监听器类似于切片，可以在执行实例或任务的特定节点触发特定事件。
+任务监听器是任务节点所特有的，而执行监听器是所有节点都具有的。监听器有特定的事件，我们需要在配置中为该类型指定监听器对应的类。
+
+ 1. 在配置中配置监听器
+![在这里插入图片描述](https://img-blog.csdnimg.cn/20201116232938798.png?x-oss-process=image/watermark,type_ZmFuZ3poZW5naGVpdGk,shadow_10,text_aHR0cHM6Ly9ibG9nLmNzZG4ubmV0L3dlaXhpbl80MjI4ODIxOQ==,size_16,color_FFFFFF,t_70#pic_center)
+2. 在代码中编写监听器
+
+```java
+/**
+ * @author zerozhao
+ * @version 1.0
+ * @title: PnxTaskListenerImpl
+ * @projectName phoenix-camunda
+ * @description: TODO 我们可以通过监听器，在这里获取下一个任务的指派人，并将其设置进去。
+ * @date 2020/11/1623:08
+ */
+public class PnxTaskListenerImpl implements TaskListener {
+    @Override
+    public void notify(DelegateTask delegateTask) {
+        String eventName = delegateTask.getEventName();
+        int priority = delegateTask.getPriority();
+        if ("create".equals(eventName)) {
+            delegateTask.setAssignee("user");
+        }
+    }
+}
+```
+
+## 动态添加任务处理人
+
+# 组任务
+## 设置组任务处理人
+
+# 角色组
+
+# 总结
+
