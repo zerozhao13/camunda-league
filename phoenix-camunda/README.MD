@@ -1069,12 +1069,11 @@ public class PnxTaskListenerImpl implements TaskListener {
 }
 ```
 
-## 动态添加任务处理人
-
 # 组任务
 ## 设置组任务处理人
+在一些任务中，可能我们暂时不确定由哪一个或一组用户来完成，我们只能定位到几位用户，这在系统中为使用候选人 - Candidate Users 或 Candidate Groups。
+当我们使用候选人时，任务的指派人会为空，而在候选人列会存在数据，并且一位候选人一条数据。
 
 # 角色组
 
 # 总结
-
